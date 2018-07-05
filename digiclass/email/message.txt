@@ -1,0 +1,5 @@
+Dear ${PERSON_NAME}, 
+Here is your weekly document. 
+
+Sincerely,
+Group 3.
