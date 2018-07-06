@@ -1,0 +1,5 @@
+Dear ${PERSON_NAME},
+Attached are your emotion reports.
+
+Sincerely,
+Digi-Classroom.

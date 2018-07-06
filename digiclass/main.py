@@ -10,10 +10,7 @@ import datetime
 from PIL import Image
 from io import BytesIO
 import json
-import smtplib
-from string import Template
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+from email_handling import Email_Handling
 
 face_recognizer = cv2.face.LBPHFaceRecognizer_create()
 
@@ -87,7 +84,7 @@ def predict(test_img):
         if(confidence < 100):
             cv2.putText(img, label_text + " " + str(confidence), (x, y - 5), cv2.FONT_HERSHEY_TRIPLEX, 2, (0, 0, 255), 2)
         if(confidence < 50):
-            take_attendance()
+            take_attendance(label)
         i+=1
     return img
 
@@ -99,50 +96,55 @@ def predict(test_img):
 
 #def storeJson():
 
-def store_dict(dict, report_type, path):
+def store_dict(dict, report_type):
     df = pd.DataFrame.from_dict(dict, orient="index", columns=[report_type])
     date = datetime.datetime.now()
-    df.to_csv(path + str(date) + '.csv',index=True, header=True)
+
+    if(report_type == "Attendance"):
+        folder = "attendance-csv/"
+    elif(report_type == "Emotion"):
+        folder = "emotion-csv"
+    df.to_csv("reports-data/" + folder + str(date) + '.csv',index=True, header=True)
 
 def saveFace(label, img):
     date = datetime.datetime.now()
     cv2.imwrite("picture-data/test-data/" + label + "/" + str(date) + '.jpg', img)
 
-def mashImages():
-    path = "picture-data/test-data/"
-    dir = sorted(os.listdir(path))
-    image_list = []
-    width_list = []
-    height_list = []
-
-    for student in dir:
-        if student.startswith('.'):
-            continue
-        student_path = "picture-data/test-data/" + student
-        images = os.listdir(student_path)
-        for image in images:
-            if image.startswith('.'):
-                continue
-            img1 = Image.open(image)
-            image_list.append(img1)
-            width, height = img1.size
-            width_list.append(width)
-            height_list.append(height)
-
-        for i in width_list:
-            width_total += i
-        height_total = max(height_list)
-
-        result = Image.new('RGB', (width_total, height_total))
-
-        for i in image_list:
-            result.paste(im=i)
-
-        date = datetime.datetime.now()
-        cv2.imwrite("picture-data/emote-data/" + student + "/" + str(date) + '.jpg', result)
+# def mashImages():
+#     path = "picture-data/test-data/"
+#     dir = sorted(os.listdir(path))
+#     image_list = []
+#     width_list = []
+#     height_list = []
+#
+#     for student in dir:
+#         if student.startswith('.'):
+#             continue
+#         student_path = "picture-data/test-data/" + student
+#         images = os.listdir(student_path)
+#         for image in images:
+#             if image.startswith('.'):
+#                 continue
+#             img1 = Image.open(image)
+#             image_list.append(img1)
+#             width, height = img1.size
+#             width_list.append(width)
+#             height_list.append(height)
+#
+#         for i in width_list:
+#             width_total += i
+#         height_total = max(height_list)
+#
+#         result = Image.new('RGB', (width_total, height_total))
+#
+#         for i in image_list:
+#             result.paste(im=i)
+#
+#         date = datetime.datetime.now()
+#         cv2.imwrite("picture-data/emote-data/" + student + "/" + str(date) + '.jpg', result)
 
 def store_attendance():
-    store_dict(attendance_data, "Attendance")
+    store_dict(attendance, "Attendance")
 
 #
 ##
@@ -164,10 +166,10 @@ def emotion(label):
     cv2.imwrite(image_path + '/' + str(date) + '.jpg', img)
     path = image_path + '/' + str(date) + '.jpg'
 
-    #insert microsoft face API key here
+    #insert microsoft face API key here in the quotes
     subscription_key = ''
     assert subscription_key
-
+    # if using trial key, this link below should work but you may have to change the endpoint
     face_api_url = 'https://westcentralus.api.cognitive.microsoft.com/face/v1.0/detect'
 
     headers = {
@@ -203,6 +205,7 @@ def emotion(label):
     date = datetime.datetime.now()
     with open("picture-data/emote-data/" + label + "/" + str(date) + '.txt', 'w') as outfile:
         json.dump(faces, outfile, indent = 4, sort_keys=True)
+        save_dict(outfile, "Emotion")
 
 def emotion_analysis():
 
@@ -223,74 +226,14 @@ def emotion_analysis():
                 emotion(i)
 
 def take_attendance(label):
-    attendance[students[label]] = "Present"
+    pupil = students[label]
+    attendance[pupil] = "Present"
 
 def email_emotion():
-    pass
+    email_handling.main_email("emotion")
+
 def email_attendance():
-    pass
-#Enter your own email and passcode here
-MY_ADDRESS = ''
-PASSWORD = ''
-
-def get_contacts(filename):
-    """
-    Return two lists names, emails containing names and email addresses
-    read from a file specified by filename.
-    """
-
-    names = []
-    emails = []
-    with open(filename, mode='r', encoding='utf-8') as contacts_file:
-        for a_contact in contacts_file:
-            names.append(a_contact.split()[0])
-            emails.append(a_contact.split()[1])
-    return names, emails
-
-def read_template(filename):
-    """
-    Returns a Template object comprising the contents of the
-    file specified by filename.
-    """
-
-    with open(filename, 'r', encoding='utf-8') as template_file:
-        template_file_content = template_file.read()
-    return Template(template_file_content)
-
-def main_email():
-    names, emails = get_contacts('mycontacts.txt') # read contacts
-    message_template = read_template('message.txt')
-
-    # set up the SMTP server
-    s = smtplib.SMTP(host='smtp.gmail.com', port=587)
-    s.starttls()
-    s.login(MY_ADDRESS, PASSWORD)
-
-    # For each contact, send the email:
-    for name, email in zip(names, emails):
-        msg = MIMEMultipart()       # create a message
-
-        # add in the actual person name to the message template
-        message = message_template.substitute(PERSON_NAME=name.title())
-
-        # Prints out the message body for our sake
-        print(message)
-
-        # setup the parameters of the message
-        msg['From']=MY_ADDRESS
-        msg['To']=email
-        msg['Subject']="This is TEST"
-
-        # add in the message body
-        msg.attach(MIMEText(message, 'plain'))
-
-
-        # send the message via the server set up earlier.
-        s.send_message(msg)
-        del msg
-
-    # Terminate the SMTP session and close the connection
-    s.quit()
+    email_handling.main_email("attendance")
 
 #
 ##
@@ -309,8 +252,6 @@ def capture():
             break
     video_capture.release()
     cv2.destroyAllWindows()
-
-
 
 def training_all():
     print("")
@@ -546,7 +487,9 @@ def reports_handler():
 # List for students
 attendance = {}
 students = []
-email =
+# YOU NEED TO CHANGE ALL THREE PARAMETERS TO YOUR EMAIL, PASSCODE, AND SMTP SERVER
+# THEN UNCOMMENT THE LINE
+#email_handling = Email_Handling('email@mail.com', 'password', 'smtp.mail.com')
 
 while(True):
     retrain = False
